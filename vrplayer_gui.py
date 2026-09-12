@@ -8,6 +8,7 @@ import shutil
 from pathlib import Path
 
 from PySide6.QtCore import QProcess, QSettings, Qt
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication, QButtonGroup, QCheckBox, QComboBox, QDoubleSpinBox,
     QFileDialog, QFormLayout, QFrame, QGroupBox, QHBoxLayout, QLabel,
@@ -262,6 +263,9 @@ class VrPlayerWindow(QMainWindow):
 if __name__ == "__main__":
     application = QApplication([])
     application.setApplicationName("VR Video Player GUI")
+    application.setDesktopFileName("vr-video-player-gui")
+    local_icon = Path(__file__).with_name("vr-video-player-gui.svg")
+    application.setWindowIcon(QIcon(str(local_icon)) if local_icon.is_file() else QIcon.fromTheme("vr-video-player-gui"))
     window = VrPlayerWindow()
     window.show()
     application.exec()
