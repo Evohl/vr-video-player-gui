@@ -6,6 +6,19 @@ Author: Evohl <evohl@evilneverdies.de>
 
 The application lets you select videos, builds the appropriate `vr-video-player` command, and starts playback. The interface supports German, English, Spanish, and Italian; English is used for all other system languages.
 
+## Features
+
+- Responsive folder scanning in a background thread, with videos added to the list in batches while the scan is still running
+- Asynchronous duration metadata loading through `ffprobe`, so large folders remain usable while durations appear progressively
+- Alphabetically sorted video list with the selected file and generated `vr-video-player` command shown in the interface
+- 180-degree, 360-degree, flat stereo, and virtual screen viewing modes
+- Stereo direction, image stretching, zoom, cursor scale, cursor wrapping, free camera, and flicker-reduction controls
+- Selectable mpv profiles and optional use of the system mpv configuration
+- Sequential or random autoplay after successful playback
+- Start and stop lifecycle handling that prevents another video from being launched before the current player process has exited
+- Persistent window position, window size, video folder, and playback settings
+- Built-in player log for standard output and error messages
+
 ## Installation on Arch Linux
 
 ### 1. Install the prerequisites

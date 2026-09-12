@@ -7,9 +7,10 @@ import shlex
 import shutil
 import random
 import subprocess
+import time
 from pathlib import Path
 
-from PySide6.QtCore import QLocale, QProcess, QSettings, QTimer, Qt
+from PySide6.QtCore import QLocale, QProcess, QSettings, QThread, QTimer, Qt, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication, QButtonGroup, QCheckBox, QComboBox, QDoubleSpinBox,
@@ -20,6 +21,92 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 from translations import translate
+
+
+class VideoScanThread(QThread):
+    videos_found = Signal(int, list)
+    duration_ready = Signal(int, str, str)
+    scan_failed = Signal(int, str)
+    discovery_complete = Signal(int, int)
+    scan_complete = Signal(int, int)
+
+    RESULT_BATCH_SIZE = 64
+    VIDEO_EXTENSIONS = {".avi", ".m4v", ".mkv", ".mov", ".mp4", ".webm"}
+
+    def __init__(self, scan_id: int, folder_path: Path) -> None:
+        super().__init__()
+        self.scan_id = scan_id
+        self.folder_path = folder_path
+
+    def run(self) -> None:
+        video_paths: list[Path] = []
+        pending_video_paths: list[str] = []
+        try:
+            for path in self.folder_path.iterdir():
+                if self.isInterruptionRequested():
+                    return
+                if path.is_file() and path.suffix.lower() in self.VIDEO_EXTENSIONS:
+                    video_paths.append(path)
+                    pending_video_paths.append(str(path))
+                    if len(pending_video_paths) >= self.RESULT_BATCH_SIZE:
+                        self.videos_found.emit(self.scan_id, pending_video_paths)
+                        pending_video_paths = []
+        except OSError as error:
+            self.scan_failed.emit(self.scan_id, str(error))
+            return
+
+        if pending_video_paths:
+            self.videos_found.emit(self.scan_id, pending_video_paths)
+        self.discovery_complete.emit(self.scan_id, len(video_paths))
+
+        for path in sorted(video_paths, key=lambda video_path: video_path.name.lower()):
+            if self.isInterruptionRequested():
+                return
+            duration = self._video_duration(path)
+            if duration is None:
+                return
+            self.duration_ready.emit(self.scan_id, str(path), duration)
+
+        self.scan_complete.emit(self.scan_id, len(video_paths))
+
+    def _video_duration(self, video_path: Path) -> str | None:
+        try:
+            process = subprocess.Popen(
+                ("ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(video_path)),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+            )
+        except OSError:
+            return "--:--"
+
+        deadline = time.monotonic() + 15
+        while True:
+            if self.isInterruptionRequested():
+                self._stop_process(process)
+                return None
+            remaining_time = deadline - time.monotonic()
+            if remaining_time <= 0:
+                self._stop_process(process)
+                return "--:--"
+            try:
+                standard_output, _standard_error = process.communicate(timeout=min(0.2, remaining_time))
+                if process.returncode != 0:
+                    return "--:--"
+                return VrPlayerWindow._format_duration(float(standard_output.strip()))
+            except subprocess.TimeoutExpired:
+                continue
+            except ValueError:
+                return "--:--"
+
+    @staticmethod
+    def _stop_process(process: subprocess.Popen[str]) -> None:
+        process.terminate()
+        try:
+            process.communicate(timeout=1)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.communicate()
 
 
 class VrPlayerWindow(QMainWindow):
@@ -41,6 +128,9 @@ class VrPlayerWindow(QMainWindow):
         self.autoplay_timer.timeout.connect(self._start_pending_autoplay)
         self.pending_autoplay_row: int | None = None
         self.stop_requested = False
+        self.scan_id = 0
+        self.scan_threads: set[VideoScanThread] = set()
+        self.video_items: dict[str, QTreeWidgetItem] = {}
         self.setWindowTitle("VR Video Player")
         self.setMinimumWidth(650)
         self._build_ui()
@@ -89,6 +179,8 @@ class VrPlayerWindow(QMainWindow):
         self.video_list.header().resizeSection(1, 72)
         self.video_list.setMinimumHeight(180)
         self.video_list.setAlternatingRowColors(True)
+        self.video_list.setSortingEnabled(True)
+        self.video_list.sortItems(0, Qt.SortOrder.AscendingOrder)
         self.video_list.currentItemChanged.connect(self._select_video)
         self.video_list.itemDoubleClicked.connect(lambda _item: self._launch())
         video_layout.addWidget(self.video_list)
@@ -239,8 +331,8 @@ class VrPlayerWindow(QMainWindow):
         if autoplay_index >= 0:
             self.autoplay_mode.setCurrentIndex(autoplay_index)
         folder_path = self.settings.value("last_video_directory", "")
-        if folder_path and Path(folder_path).is_dir():
-            self._load_video_folder(Path(folder_path))
+        if folder_path:
+            QTimer.singleShot(0, lambda path=Path(folder_path): self._load_video_folder(path))
 
     def _selected_mode(self) -> str:
         return next(mode for mode, button in self.mode_buttons.items() if button.isChecked())
@@ -278,37 +370,71 @@ class VrPlayerWindow(QMainWindow):
             self._load_video_folder(Path(folder_name))
 
     def _load_video_folder(self, folder_path: Path) -> None:
-        video_extensions = {".avi", ".m4v", ".mkv", ".mov", ".mp4", ".webm"}
-        video_paths = sorted(
-            (path for path in folder_path.iterdir() if path.is_file() and path.suffix.lower() in video_extensions),
-            key=lambda path: path.name.lower(),
-        )
+        self.scan_id += 1
+        for scan_thread in self.scan_threads:
+            scan_thread.requestInterruption()
         self.folder_path.setText(str(folder_path))
         self.video_path.clear()
+        self.video_path.setPlaceholderText(self._text("Kein Video ausgewaehlt"))
         self.video_list.clear()
-        for path in video_paths:
-            item = QTreeWidgetItem((path.name, self._video_duration(path)))
-            item.setData(0, Qt.ItemDataRole.UserRole, str(path))
-            self.video_list.addTopLevelItem(item)
-        if video_paths:
-            self.video_list.setCurrentItem(self.video_list.topLevelItem(0))
-        else:
-            self.video_path.setPlaceholderText(self._text("Keine unterstuetzten Videos in diesem Ordner"))
+        self.video_list.setSortingEnabled(False)
+        self.video_items.clear()
+        self.statusBar().showMessage(self._text("Videos werden gesucht..."))
         self.settings.setValue("last_video_directory", str(folder_path))
 
-    @staticmethod
-    def _video_duration(video_path: Path) -> str:
-        try:
-            result = subprocess.run(
-                ("ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(video_path)),
-                capture_output=True,
-                check=True,
-                text=True,
-                timeout=15,
-            )
-            return VrPlayerWindow._format_duration(float(result.stdout.strip()))
-        except (OSError, subprocess.SubprocessError, ValueError):
-            return "--:--"
+        scan_thread = VideoScanThread(self.scan_id, folder_path)
+        scan_thread.videos_found.connect(self._add_scanned_videos)
+        scan_thread.duration_ready.connect(self._update_scanned_video_duration)
+        scan_thread.scan_failed.connect(self._on_scan_failed)
+        scan_thread.discovery_complete.connect(self._on_discovery_complete)
+        scan_thread.scan_complete.connect(self._on_scan_complete)
+        scan_thread.finished.connect(lambda thread=scan_thread: self._release_scan_thread(thread))
+        self.scan_threads.add(scan_thread)
+        scan_thread.start()
+
+    def _add_scanned_videos(self, scan_id: int, video_paths: list[str]) -> None:
+        if scan_id != self.scan_id:
+            return
+        items: list[QTreeWidgetItem] = []
+        for video_path in video_paths:
+            path = Path(video_path)
+            item = QTreeWidgetItem((path.name, "..."))
+            item.setData(0, Qt.ItemDataRole.UserRole, video_path)
+            self.video_items[video_path] = item
+            items.append(item)
+        self.video_list.addTopLevelItems(items)
+        if self.video_list.currentItem() is None:
+            self.video_list.setCurrentItem(items[0])
+        self.statusBar().showMessage(
+            self._text("{count} Videos geladen").format(count=len(self.video_items))
+        )
+
+    def _on_discovery_complete(self, scan_id: int, video_count: int) -> None:
+        if scan_id != self.scan_id:
+            return
+        self.video_list.setSortingEnabled(True)
+        self.video_list.sortItems(0, Qt.SortOrder.AscendingOrder)
+        if video_count == 0:
+            self.video_path.setPlaceholderText(self._text("Keine unterstuetzten Videos in diesem Ordner"))
+        self.statusBar().showMessage(self._text("{count} Videos geladen").format(count=video_count))
+
+    def _update_scanned_video_duration(self, scan_id: int, video_path: str, duration: str) -> None:
+        if scan_id == self.scan_id and video_path in self.video_items:
+            self.video_items[video_path].setText(1, duration)
+
+    def _on_scan_failed(self, scan_id: int, error: str) -> None:
+        if scan_id == self.scan_id:
+            self.video_list.setSortingEnabled(True)
+            self.statusBar().showMessage(self._text("Ordner konnte nicht gelesen werden: {error}").format(error=error))
+
+    def _on_scan_complete(self, scan_id: int, video_count: int) -> None:
+        if scan_id != self.scan_id:
+            return
+        self.statusBar().showMessage(self._text("{count} Videos geladen").format(count=video_count))
+
+    def _release_scan_thread(self, scan_thread: VideoScanThread) -> None:
+        self.scan_threads.discard(scan_thread)
+        scan_thread.deleteLater()
 
     @staticmethod
     def _format_duration(duration_seconds: float) -> str:
@@ -370,11 +496,12 @@ class VrPlayerWindow(QMainWindow):
         if message.strip():
             self.log_output.appendPlainText(message.rstrip())
 
-    def _on_player_error(self, _error: QProcess.ProcessError) -> None:
+    def _on_player_error(self, error: QProcess.ProcessError) -> None:
         self._read_standard_error()
-        self.launch_button.setEnabled(True)
-        if not self.stop_requested:
+        if error == QProcess.ProcessError.FailedToStart:
+            self.launch_button.setEnabled(True)
             self.stop_button.setEnabled(False)
+        if not self.stop_requested:
             self._append_log(self._text("Prozessfehler: {error}").format(error=self.player_process.errorString()))
             self.statusBar().showMessage(self._text("VR-Player mit Fehler beendet"))
 
@@ -428,6 +555,10 @@ class VrPlayerWindow(QMainWindow):
         return None
 
     def closeEvent(self, event) -> None:
+        for scan_thread in self.scan_threads:
+            scan_thread.requestInterruption()
+        for scan_thread in self.scan_threads:
+            scan_thread.wait(1500)
         self.settings.setValue("window_size", self.size())
         self.settings.setValue("window_position", self.pos())
         self.settings.setValue("view_mode", self._selected_mode())
