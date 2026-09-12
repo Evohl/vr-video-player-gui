@@ -4,56 +4,77 @@ Eine kleine native Qt6-GUI fuer `vr-video-player` unter Linux.
 
 Autor: Evohl <evohl@evilneverdies.de>
 
-## Voraussetzungen
+Die Anwendung waehlt Videos aus, erstellt den passenden `vr-video-player`-Befehl und startet die Wiedergabe. Die Oberflaeche unterstuetzt Deutsch, Englisch, Spanisch und Italienisch; bei anderen Systemsprachen wird Englisch verwendet.
 
-- Python 3 mit [PySide6](https://archlinux.org/packages/extra/x86_64/pyside6/)
-- [vr-video-player im AUR](https://aur.archlinux.org/packages/vr-video-player)
-- Eine funktionierende SteamVR-Installation
+## Installation unter Arch Linux
 
-Unter Arch Linux kann `vr-video-player` beispielsweise mit einem AUR-Helfer installiert werden:
+### 1. Voraussetzungen installieren
+
+Zum Bauen des Pakets werden `base-devel` und Git benoetigt:
+
+```bash
+sudo pacman -S --needed base-devel git
+```
+
+Ausserdem muss eine funktionierende SteamVR-Installation vorhanden sein.
+
+### 2. vr-video-player installieren
+
+Die GUI verwendet [vr-video-player](https://aur.archlinux.org/packages/vr-video-player) fuer die eigentliche VR-Wiedergabe. Mit einem AUR-Helfer wie `yay` wird die Abhaengigkeit so installiert:
 
 ```bash
 yay -S vr-video-player
 ```
 
-Alternativ kann das AUR-Paket manuell gebaut werden:
+Ohne AUR-Helfer kann das Paket manuell gebaut und installiert werden:
 
 ```bash
 git clone https://aur.archlinux.org/vr-video-player.git
 cd vr-video-player
 makepkg -si
+cd ..
 ```
 
-Weitere Informationen zur Einrichtung und Bedienung stehen auf der
-[Upstream-Projektseite](https://git.dec05eba.com/vr-video-player/about/).
+Weitere Hinweise, insbesondere zu SteamVR, stehen auf der [Upstream-Projektseite](https://git.dec05eba.com/vr-video-player/about/).
 
-## Starten
+### 3. VR Video Player GUI installieren
 
-```bash
-python3 vrplayer_gui.py
-```
-
-Die Anwendung waehlt ein Video aus, erstellt den passenden `vr-video-player`-Befehl und startet ihn. Sie verwendet den Systemstil der installierten Qt-Desktop-Umgebung und speichert die zuletzt verwendeten Optionen. Das Python-Modul `PySide6` muss installiert und `vr-video-player` muss im `PATH` verfuegbar sein.
-
-Die Oberflaeche richtet sich nach der Systemsprache: Deutsch, Englisch, Spanisch und Italienisch werden direkt unterstuetzt; alle anderen Sprachen verwenden Englisch.
-
-## Arch Linux und Startmenue
-
-Ein Arch-Paketrezept (`PKGBUILD`) und ein Startmenueeintrag (`vr-video-player-gui.desktop`) liegen im Projektstamm. Fuer eine lokale Installation:
+Das Repository der GUI klonen und das enthaltene Arch-Paket installieren:
 
 ```bash
+git clone https://github.com/Evohl/vr-video-player-gui.git
+cd vr-video-player-gui
 makepkg -si
 ```
 
-Danach erscheint **VR Video Player GUI** im Anwendungsmenue und ist auch mit folgendem Befehl startbar:
+`makepkg` installiert die weiteren benoetigten Pakete wie Python, [PySide6](https://archlinux.org/packages/extra/x86_64/pyside6/) und FFmpeg ueber `pacman`.
+
+## Anwendung starten
+
+Nach der Installation kann **VR Video Player GUI** ueber das Anwendungsmenue oder im Terminal gestartet werden:
 
 ```bash
 vr-video-player-gui
 ```
 
-Fuer eine Veroeffentlichung im AUR wird ein oeffentliches Git-Repository mit diesen Quelldateien benoetigt. Vor dem Upload muss im `PKGBUILD` die `url` durch die Repository-URL ersetzt und `pkgver` bei Releases aktualisiert werden. Anschliessend werden `PKGBUILD`, `vrplayer_gui.py` und `vr-video-player-gui.desktop` in das namensgleiche AUR-Git-Repository gepusht.
+## Aktualisieren
 
-## Optionaler Starter
+Im geklonten Projektverzeichnis die neuesten Aenderungen laden und das Paket neu bauen:
+
+```bash
+git pull
+makepkg -si
+```
+
+## Ohne Installation ausfuehren
+
+Fuer Entwicklung oder einen kurzen Test kann die GUI direkt aus dem Projektverzeichnis gestartet werden:
+
+```bash
+python3 vrplayer_gui.py
+```
+
+Alternativ ist das Skript direkt ausfuehrbar:
 
 ```bash
 chmod +x vrplayer_gui.py
