@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import shlex
 import shutil
+import random
 from pathlib import Path
 
 from PySide6.QtCore import QProcess, QSettings, Qt
@@ -22,6 +23,9 @@ class VrPlayerWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.settings = QSettings("VR Video Player", "VR Video Player GUI")
+        self.player_process = QProcess(self)
+        self.player_process.finished.connect(self._on_player_finished)
+        self.player_process.errorOccurred.connect(self._on_player_error)
         self.setWindowTitle("VR Video Player")
         self.setMinimumWidth(650)
         self._build_ui()
@@ -122,6 +126,11 @@ class VrPlayerWindow(QMainWindow):
         self.mpv_profile = QComboBox()
         self.mpv_profile.addItems(("gpu-hq", "gpu-next", "fast"))
         options_layout.addRow("mpv-Profil:", self.mpv_profile)
+        self.autoplay_mode = QComboBox()
+        self.autoplay_mode.addItem("Aus", "off")
+        self.autoplay_mode.addItem("Naechstes in Reihenfolge", "sequential")
+        self.autoplay_mode.addItem("Zufaelliges Video", "random")
+        options_layout.addRow("Nach Wiedergabe:", self.autoplay_mode)
         layout.addWidget(options_group)
 
         layout.addWidget(QLabel("Befehl"))
@@ -130,10 +139,10 @@ class VrPlayerWindow(QMainWindow):
         layout.addWidget(self.command_preview)
         launch_layout = QHBoxLayout()
         launch_layout.addStretch()
-        launch_button = QPushButton("In VR abspielen")
-        launch_button.setDefault(True)
-        launch_button.clicked.connect(self._launch)
-        launch_layout.addWidget(launch_button)
+        self.launch_button = QPushButton("In VR abspielen")
+        self.launch_button.setDefault(True)
+        self.launch_button.clicked.connect(self._launch)
+        launch_layout.addWidget(self.launch_button)
         layout.addLayout(launch_layout)
 
         for button in (self.left_right, self.right_left, self.stretch):
@@ -169,6 +178,9 @@ class VrPlayerWindow(QMainWindow):
         profile_index = self.mpv_profile.findText(self.settings.value("mpv_profile", "gpu-hq"))
         if profile_index >= 0:
             self.mpv_profile.setCurrentIndex(profile_index)
+        autoplay_index = self.autoplay_mode.findData(self.settings.value("autoplay_mode", "off"))
+        if autoplay_index >= 0:
+            self.autoplay_mode.setCurrentIndex(autoplay_index)
         folder_path = self.settings.value("last_video_directory", "")
         if folder_path and Path(folder_path).is_dir():
             self._load_video_folder(Path(folder_path))
@@ -232,6 +244,9 @@ class VrPlayerWindow(QMainWindow):
             self.video_path.setText(current_item.data(Qt.ItemDataRole.UserRole))
 
     def _launch(self) -> None:
+        if self.player_process.state() != QProcess.ProcessState.NotRunning:
+            QMessageBox.information(self, "Wiedergabe aktiv", "Ein Video wird bereits in VR wiedergegeben.")
+            return
         video_path = self.video_path.text().strip()
         if not video_path:
             QMessageBox.warning(self, "Kein Video", "Bitte waehle zuerst eine Videodatei aus.")
@@ -242,7 +257,31 @@ class VrPlayerWindow(QMainWindow):
         if not shutil.which("vr-video-player"):
             QMessageBox.critical(self, "Programm nicht gefunden", "vr-video-player wurde nicht im PATH gefunden.")
             return
-        QProcess.startDetached("vr-video-player", self._build_command()[1:])
+        self.launch_button.setEnabled(False)
+        self.player_process.start("vr-video-player", self._build_command()[1:])
+
+    def _on_player_error(self, _error: QProcess.ProcessError) -> None:
+        self.launch_button.setEnabled(True)
+
+    def _on_player_finished(self, _exit_code: int, exit_status: QProcess.ExitStatus) -> None:
+        self.launch_button.setEnabled(True)
+        if exit_status != QProcess.ExitStatus.NormalExit or self.autoplay_mode.currentData() == "off":
+            return
+        next_row = self._next_video_row()
+        if next_row is not None:
+            self.video_list.setCurrentRow(next_row)
+            self._launch()
+
+    def _next_video_row(self) -> int | None:
+        video_count = self.video_list.count()
+        current_row = self.video_list.currentRow()
+        if video_count < 2:
+            return None
+        if self.autoplay_mode.currentData() == "sequential":
+            return current_row + 1 if current_row + 1 < video_count else None
+        if self.autoplay_mode.currentData() == "random":
+            return random.choice([row for row in range(video_count) if row != current_row])
+        return None
 
     def closeEvent(self, event) -> None:
         self.settings.setValue("window_size", self.size())
@@ -257,6 +296,7 @@ class VrPlayerWindow(QMainWindow):
         self.settings.setValue("reduce_flicker", self.reduce_flicker.isChecked())
         self.settings.setValue("use_system_mpv_config", self.use_system_mpv_config.isChecked())
         self.settings.setValue("mpv_profile", self.mpv_profile.currentText())
+        self.settings.setValue("autoplay_mode", self.autoplay_mode.currentData())
         super().closeEvent(event)
 
 
