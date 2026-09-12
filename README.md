@@ -12,6 +12,8 @@ python3 vrplayer_gui.py
 
 Die Anwendung waehlt ein Video aus, erstellt den passenden `vr-video-player`-Befehl und startet ihn. Sie verwendet den Systemstil der installierten Qt-Desktop-Umgebung und speichert die zuletzt verwendeten Optionen. `PySide6` sowie `vr-video-player` muessen im `PATH` installiert sein.
 
+Die Oberflaeche richtet sich nach der Systemsprache: Deutsch, Englisch, Spanisch und Italienisch werden direkt unterstuetzt; alle anderen Sprachen verwenden Englisch.
+
 ## Arch Linux und Startmenue
 
 Ein Arch-Paketrezept (`PKGBUILD`) und ein Startmenueeintrag (`vr-video-player-gui.desktop`) liegen im Projektstamm. Fuer eine lokale Installation:
