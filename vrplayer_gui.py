@@ -41,7 +41,7 @@ class VrPlayerWindow(QMainWindow):
         self.autoplay_timer.timeout.connect(self._start_pending_autoplay)
         self.pending_autoplay_row: int | None = None
         self.stop_requested = False
-        self.setWindowTitle(self._text("VR Video Player"))
+        self.setWindowTitle("VR Video Player")
         self.setMinimumWidth(650)
         self._build_ui()
         self._build_log_window()
@@ -59,7 +59,7 @@ class VrPlayerWindow(QMainWindow):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(14)
 
-        title = QLabel(self._text("VR Video Player"))
+        title = QLabel("VR Video Player")
         title_font = title.font()
         title_font.setPointSize(title_font.pointSize() + 6)
         title_font.setBold(True)
@@ -172,14 +172,14 @@ class VrPlayerWindow(QMainWindow):
         self.log_button.clicked.connect(self._show_log_window)
         launch_layout.addWidget(self.log_button)
         launch_layout.addStretch()
-        self.launch_button = QPushButton(self._text("Abspielen"))
-        self.launch_button.setDefault(True)
-        self.launch_button.clicked.connect(self._launch)
-        launch_layout.addWidget(self.launch_button)
         self.stop_button = QPushButton(self._text("Stopp"))
         self.stop_button.setEnabled(False)
         self.stop_button.clicked.connect(self._stop)
         launch_layout.addWidget(self.stop_button)
+        self.launch_button = QPushButton(self._text("Abspielen"))
+        self.launch_button.setDefault(True)
+        self.launch_button.clicked.connect(self._launch)
+        launch_layout.addWidget(self.launch_button)
         layout.addLayout(launch_layout)
 
         for button in (self.left_right, self.right_left, self.stretch):

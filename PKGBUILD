@@ -2,7 +2,7 @@
 
 pkgname=vr-video-player-gui
 pkgver=0.1.0
-pkgrel=11
+pkgrel=12
 pkgdesc="Native Qt6 launcher for vr-video-player"
 arch=('any')
 url="https://github.com/Evohl/vr-video-player-gui"

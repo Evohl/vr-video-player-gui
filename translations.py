@@ -59,7 +59,6 @@ TRANSLATIONS = {
         "VR-Player abgestuerzt (Exit-Code {code}).": "VR player crashed (exit code {code}).",
     },
     "es": {
-        "VR Video Player": "Reproductor de Video VR",
         "Video auswaehlen und direkt in VR oeffnen": "Selecciona un video y abrelo directamente en VR",
         "Video-Ordner": "Carpeta de videos",
         "Ordner mit Videos auswaehlen": "Selecciona una carpeta con videos",
@@ -114,7 +113,6 @@ TRANSLATIONS = {
         "VR-Player abgestuerzt (Exit-Code {code}).": "El reproductor VR fallo (codigo de salida {code}).",
     },
     "it": {
-        "VR Video Player": "Lettore Video VR",
         "Video auswaehlen und direkt in VR oeffnen": "Seleziona un video e aprilo direttamente in VR",
         "Video-Ordner": "Cartella video",
         "Ordner mit Videos auswaehlen": "Seleziona una cartella contenente video",
