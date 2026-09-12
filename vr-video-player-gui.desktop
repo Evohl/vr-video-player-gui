@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=VR Video Player GUI
+Comment=Select and play videos with vr-video-player
+Exec=vr-video-player-gui
+Icon=video-display
+Terminal=false
+Categories=AudioVideo;Video;Player;
+Keywords=VR;video;SteamVR;OpenVR;
+StartupNotify=true
